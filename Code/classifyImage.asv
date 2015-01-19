@@ -1,0 +1,9 @@
+function output = classifyImage(patch)
+
+normalizedPatch = normalizeData(patch);
+
+output = hypothesisFunc
+
+
+
+end

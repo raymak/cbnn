@@ -1,0 +1,133 @@
+function [cost,grad] = sparseAutoencoderCost_vec(theta, visibleSize, hiddenSize, ...
+                                             outputSize,lambda, sparsityParam, beta, data, output)
+
+                                         
+%reshape weight parameters 
+index = 1;
+W = {};
+mat_size = hiddenSize(1) * visibleSize;
+W{1} = reshape(theta(index:index + mat_size - 1), hiddenSize(1), visibleSize);    
+index = index + mat_size;
+for i = 2:hiddenLayers     
+    mat_size = hiddenSize(i) * hiddenSize(i-1); 
+    W{i} = reshape(theta(index:index + mat_size - 1), hiddenSize(i), hiddenSize(i-1));    
+    index = index + mat_size;
+end
+mat_size = hiddenSize(hiddenLayers) * outputSize;
+W{hiddenLayers + 1} = reshape(theta(index:index + mat_size - 1), outputSize, hiddenSize(hiddenLayers));    
+index = index + mat_size;
+%get bias vectors
+b = {};
+for i = 1:hiddenLayers
+    b{i} = theta(index:index + hiddenSize(i)-1);
+    index = index + hiddenSize(i);
+end
+b{hiddenLayers + 1} = theta(index:end);
+
+
+% Cost and gradient variables (your code needs to compute these values). 
+% Here, we initialize them to zeros. 
+cost = 0;
+Wgrad = {};
+bgrad = {};
+for i = 1:hiddenLayers+1
+    Wgrad{i} = zeros(size(W{i}));
+    bgrad{i} = zeros(size(b{i})); 
+end
+
+
+%number of samples
+m = size(data,2);
+%calculating the hypothesis - forward propagation
+rho = sparsityParam;
+%for each training example
+z = {};
+a = {};
+z{1} = data; %X for each training example
+a{1} = data; %X for each training example
+for i = 2:hiddenLayers + 2
+z{i} = W{i-1} * a{i-1} + repmat(b{i-1},1,m);
+a{i} = activationFunc(z{i});
+end
+%a{hiddenLayers + 2} is the final hypothesis
+%calculating the cost
+cost = 0.5 * sum(sum( (a{hiddenLayers + 2} - output) .^ 2 )); %Loss function, %data -labels
+%normalizing
+cost = cost / m;
+%calculating rho_j for each hidden neuron j for each hidden layer
+rho_j = {};
+rho_j{1} = [];
+rho_j{hiddenLayers+2} = [];
+for i = 2:hiddenLayers+1
+    rho_j{i} = a{i};
+    %normalizing
+    rho_j{i} = sum(rho_j{i},2) ./ m;
+end
+
+%calculate delta's
+delta = {};
+for i = 1:hiddenLayers+2
+    delta{i} = [];
+end
+delta{1} = [];
+delta{hiddenLayers+2} = (a{hiddenLayers+2} - output) .* sigmoid_derivative(z{hiddenLayers + 2}); %data - labels
+for i = hiddenLayers+1:-1:2
+    delta{i} = (W{i}' * delta{i + 1}) .* sigmoid_derivative(z{i});
+end
+
+%adding the term from sparsity constraint
+for i = 2:hiddenLayers+1
+    temp = repmat( beta * ( -rho * (1 ./ rho_j{i} ) + (1 - rho) * 1./ (1 - rho_j{i})  ), 1, m);  
+    delta{i} = delta{i} + temp  .* sigmoid_derivative(z{i});
+end
+
+for i = hiddenLayers+1:-1:2
+    Wgrad{i} = delta{i+1} * a{i}';
+end
+Wgrad{1} = delta{2} * data'; %data - labels
+for i = hiddenLayers+1:-1:1
+    bgrad{i} = bgrad{i} + sum(delta{i+1},2);
+end
+
+%adding contribution from regularization term
+for i = 1:hiddenLayers+1
+    cost = cost + (lambda/2) * sum(sum(W{i} .^ 2));
+    Wgrad{i} = Wgrad{i} ./ m;
+    Wgrad{i} = Wgrad{i} + lambda * W{i};
+    bgrad{i} = bgrad{i} ./ m;
+end
+
+%Adding the cost contribution from sparsity term
+for i = 2:hiddenLayers+1
+    cost = cost + beta * KL(rho,rho_j{i});
+end
+%-------------------------------------------------------------------
+% After computing the cost and gradient, we will convert the gradients back
+% to a vector format (suitable for minFunc).  Specifically, we will unroll
+% your gradient matrices into a vector.
+
+grad = [];
+%vectorizing weight matrices
+for i = 1:hiddenLayers + 1
+    grad = [grad ; Wgrad{i}(:)];
+end
+%vectorizing bias vectors
+for i = 1:hiddenLayers + 1
+    grad = [grad ; bgrad{i}(:)];
+end 
+
+end
+
+%-------------------------------------------------------------------
+% Here's an implementation of the sigmoid function, which you may find useful
+% in your computation of the costs and the gradients.  This inputs a (row or
+% column) vector (say (z1, z2, z3)) and returns (f(z1), f(z2), f(z3)). 
+
+function sigm_der = sigmoid_derivative(x)
+	sigm_der = sigmoid(x) .* (repmat(1,size(x)) - sigmoid(x));
+end
+
+function cost = KL(rho,rho_j)
+	cost = sum(rho * log( rho * 1 ./ rho_j ) + (1 - rho) * log( (1 -rho) *  (1  ./  ( repmat(1,size(rho_j)) - rho_j)) ));
+end
+

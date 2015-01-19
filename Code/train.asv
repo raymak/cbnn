@@ -1,0 +1,74 @@
+function [opttheta] = train(data,labels,opts)   
+
+    size(data)
+    size(labels)    
+    %get all parameters
+    visibleSize = opts.visibleSize;
+    outputSize = opts.outputSize;
+    hiddenLayers = opts.hiddenLayers;
+    hiddenSize = opts.hiddenSize;
+    sparsityParam = opts.sparsityParam;
+    lambda = opts.lambda;
+    beta = opts.beta;
+    neuronsPerBlock = opts.neuronsPerBlock;
+    maxiter = opts.maxiter;
+    debug = opts.debug; 
+    
+    if debug == 1
+        
+        %  Obtain random parameters theta
+        theta = initializeParameters(hiddenSize, visibleSize, outputSize);
+
+        %function to find the cost and the gradient at a particular theta
+        [cost, grad] = evaluateCost(theta, visibleSize, hiddenLayers,hiddenSize,outputSize,lambda, ...
+                                         sparsityParam, beta, neuronsPerBlock,data, labels);
+        
+        checkNumericalGradient();
+        % Now we can use it to check your cost function and derivative calculations
+        % for the sparse autoencoder.  
+        numgrad = computeNumericalGradient( @(x) evaluateCost(x, visibleSize, ...
+                                                     hiddenLayers,hiddenSize,outputSize,lambda, ...
+                                                    sparsityParam, beta,neuronsPerBlock, ...
+                                                   data, labels), theta);
+  
+        % Use this to visually compare the gradients side by side
+        disp([numgrad grad]);
+        % Compare numerically computed gradients with the ones obtained from backpropagation
+        diff = norm(numgrad-grad)/norm(numgrad+grad);
+        fprintf('Diff is ')
+        disp(diff); % Should be small. In our implementation, these values are
+                % usually less than 1e-9.
+
+    end
+
+    %%======================================================================
+    
+    %  Randomly initialize the parameters
+    if opts.randomInitialize == 1
+        theta = initializeParameters(hiddenSize, visibleSize,outputSize);
+    else
+        theta1 = initializeParameters(hiddenSize, visibleSize,outputSize);
+        load(opts.loadfname,'opttheta');
+        theta = opttheta;
+    end
+
+    %  Use minFunc to minimize the function
+    addpath minFunc/
+    options.Method = 'lbfgs'; % Here, we use L-BFGS to optimize our cost
+                              % function. Generally, for minFunc to work, you
+                              % need a function pointer with two outputs: the
+                              % function value and the gradient. In our problem,
+                              % sparseAutoencoderCost.m satisfies this.
+    options.maxIter = maxiter;	  % Maximum number of iterations of L-BFGS to run 
+    options.display = 'on';
+
+    [opttheta, cost] = minFunc( @(p) evaluateCost(p, ...
+                                       visibleSize, hiddenLayers,hiddenSize,outputSize, ...
+                                       lambda, sparsityParam, ...
+                                       beta, neuronsPerBlock,data, labels), ...
+                                  theta, options);
+    if opts.savefile == 1
+        save(opts.savefname,'opttheta')
+    end
+                              
+end

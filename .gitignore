@@ -1,0 +1,4 @@
+/Code/workspaces/**/*
+/Code/logs/**/*
+/Code/datasets/**/*
+/MNIST/**/*
